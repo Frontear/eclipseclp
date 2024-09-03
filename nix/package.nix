@@ -1,20 +1,23 @@
 {
   lib,
 
-  stdenv,
+  stdenvNoCC,
   fetchzip,
 
   makeWrapper,
 
+  jdk8,
+
   buildFHSEnv,
 }:
 let
-  eclipse = stdenv.mkDerivation (finalAttrs: {
+  arch = "x86_64_linux"; # this program is something..
+  eclipse = stdenvNoCC.mkDerivation {
     pname = "eclipse";
-    version = "6.1_229";
+    version = "6.1";
 
     src = fetchzip {
-      url = "https://eclipseclp.org/Distribution/Builds/6.1_229/x86_64_linux/eclipse_basic.tgz";
+      url = "https://eclipseclp.org/Distribution/Builds/6.1_229/${arch}/eclipse_basic.tgz";
       hash = "sha256-fjEvw0ZfTm7d+U4dFe64OLjrJmW4vEYoVsBGfragwgI=";
 
       stripRoot = false;
@@ -22,23 +25,29 @@ let
 
     nativeBuildInputs = [ makeWrapper ];
 
-    dontConfigure = true;
+    # do they like out for bins, or bin?
+    # do they like dev for libs, or lib?
+    # it's all so darn inconsistent
+    outputs = [
+      "out"
+      "dev"
+    ];
 
     installPhase = ''
       runHook preInstall
 
-      mkdir -p $out/{bin,lib}
+      mkdir -p $out $dev
 
-      cp -R lib/x86_64_linux/* $out/lib
-      install -Dm755 lib/x86_64_linux/eclipse.exe $out/bin/eclipse
+      install -D -m 755 lib/${arch}/eclipse.exe $out/bin/eclipse
+      cp -R --preserve=mode lib/${arch}/ $dev/lib
 
       runHook postInstall
     '';
 
-    # Apparently this is necessary?
-    postInstall = ''
+    postFixup = ''
       wrapProgram $out/bin/eclipse \
-        --set "ECLIPSEDIR" "$src"
+        --set "ECLIPSEDIR" "$src" \
+        --set "JRE_HOME" "${jdk8}/jre"
     '';
 
     meta = with lib; {
@@ -51,15 +60,19 @@ let
       '';
       homepage = "https://eclipseclp.org/";
 
-      license = licenses.unfree; # CMPL
+      license = licenses.unfree; # no CMPL
       platforms = [ "x86_64-linux" ];
-      mainProgram = finalAttrs.pname;
+      mainProgram = "eclipse";
+
+      maintainers = with maintainers; [ frontear ];
     };
-  });
+  };
 in buildFHSEnv {
   name = "eclipse-fhs";
 
-  targetPkgs = _: [
-    eclipse
-  ];
+  extraOutputsToInstall = [ "out" "dev" ];
+
+  targetPkgs = _: [ eclipse ];
+
+  runScript = eclipse.meta.mainProgram;
 }
